@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+
+# SQLite token store (runtime data, must not be committed)
+/data/
+*.db
+
+# Build artifacts
+build/
+dist/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

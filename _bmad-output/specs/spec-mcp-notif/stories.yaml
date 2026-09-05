@@ -1,0 +1,164 @@
+- id: "1"
+  title: Firebase project setup
+  description: >-
+    Create a Firebase project, add an Android app, generate the service account
+    JSON for the MCP server, and produce google-services.json for the Android
+    app. Shared prerequisite for both build tracks (CAP-1, CAP-6).
+  done_checkpoint: true
+  invoke_dev_with: >-
+    This is a setup story, not a code story. Output: Firebase project ID,
+    service account JSON (path to be referenced as FCM_SERVICE_ACCOUNT_PATH),
+    google-services.json for the Android app. Document where each artifact
+    lives so Stories 3 and 7 can reference them.
+
+- id: "2"
+  title: MCP server — notify tool core + input validation
+  description: >-
+    Build the hexagonal application core: the notify tool logic and input
+    validation per AD-1 (three required non-empty string fields with byte
+    limits title<=100, short_message<=500, detailed_message<=3500). Wire the
+    FastMCP Streamable HTTP inbound adapter so the tool is callable. Covers
+    CAP-1 and CAP-2.
+  invoke_dev_with: >-
+    Hexagonal architecture per ARCHITECTURE-SPINE.md. The core must have no
+    knowledge of HTTP, MCP protocol, or FCM. The FCM outbound adapter is a
+    port/interface in this story — stub it for unit tests. FastMCP 4.x,
+    Python 3.12+, async handlers. Return validation_error type for invalid
+    input without contacting FCM.
+
+- id: "3"
+  title: MCP server — FCM sender + error handling
+  description: >-
+    Implement the FCM outbound adapter using firebase-admin SDK 7.5.0. Send
+    data-only FCM messages per AD-2. Map FCM API errors to the enumerated
+    error types per AD-8 (validation_error, no_device_enrolled,
+    store_unavailable, fcm_unregistered, fcm_invalid_argument,
+    fcm_permission_denied, fcm_throttled, fcm_internal, network_error) with
+    retry vs. skip semantics. Success returns the FCM message ID. Reads the
+    device token from the SQLite token store populated by the enrollment
+    endpoint (Story 5). Covers CAP-4.
+  invoke_dev_with: >-
+    FCM HTTP v1 via firebase-admin with service account credentials from
+    FCM_SERVICE_ACCOUNT_PATH env var. Device token read from SQLite token
+    store (set by /enroll endpoint from Story 5) — not from an env var.
+    Data-only message: data: {title, short_message, detailed_message} — no
+    notification key. Do not retry on FCM errors; return the structured error
+    to the LLM caller. MCP server never adds data keys beyond the three
+    defined in AD-2. If the SQLite store is empty or missing, return
+    no_device_enrolled. If the store is corrupt or inaccessible, return
+    store_unavailable. Every SQLite connection MUST set PRAGMA
+    journal_mode=WAL and PRAGMA busy_timeout=5000.
+
+- id: "4"
+  title: MCP server — authentication
+  description: >-
+    Add static bearer token authentication on the MCP transport per AD-4.
+    Validate the Authorization header against MCP_AUTH_TOKEN env var on every
+    MCP transport request (the notify tool). Reject with HTTP 401 on
+    mismatch. Covers CAP-3.
+  invoke_dev_with: >-
+    Auth is a cross-cutting concern on the inbound adapter, not in the
+    application core. Read token from MCP_AUTH_TOKEN env var. No mTLS, no
+    OAuth2 server, no rate limiting in V1. The /enroll endpoint (Story 5)
+    uses a separate bearer token (ENROLLMENT_TOKEN), not MCP_AUTH_TOKEN.
+    Two distinct auth paths — AD-4 scopes to MCP transport requests only.
+
+- id: "5"
+  title: MCP server — enrollment endpoint + SQLite token store
+  description: >-
+    Add the POST /enroll HTTP endpoint that accepts an FCM device token from
+    the Android app, validates it, and persists it in a SQLite token store
+    for use by the notify tool's FCM sender. Replaces the former
+    FCM_DEVICE_TOKEN env var. The token must survive server restarts via a
+    volume-mounted SQLite file. Covers CAP-9 and the persistence layer for
+    CAP-5.
+  invoke_dev_with: >-
+    This is a plain HTTP endpoint (POST /enroll), not an MCP tool — the
+    Android app calls it directly via HTTP POST. FastMCP 4.x generates a
+    standard ASGI app; mount FastMCP inside a FastAPI or Starlette app and
+    add /enroll as a custom route — same process, same port. Auth: validate
+    Authorization: Bearer ENROLLMENT_TOKEN header (env var, separate from
+    MCP_AUTH_TOKEN). Reject with 401 on mismatch, 400 on missing/empty
+    device_token. Body: {device_token: string} — reject extra fields.
+    Persist via INSERT OR REPLACE INTO device_token (id, token, enrolled_at)
+    VALUES (1, ?, ?) — overwrite semantics, last enrollment wins. SQLite:
+    single table, single row (id=1), created at server startup via CREATE
+    TABLE IF NOT EXISTS before either adapter accepts requests. WAL mode
+    (PRAGMA journal_mode=WAL) and busy_timeout=5000 on every connection.
+    File path via TOKEN_DB_PATH env var, default /data/device_token.db.
+    Volume-mount /data for persistence across container restarts. The notify
+    tool (Story 3) reads the token via SELECT token FROM device_token WHERE
+    id=1. enrolled_at format: %Y-%m-%dT%H:%M:%SZ. This endpoint MUST NOT
+    trigger a notification. Goes through Apache TLS termination (AD-9).
+
+- id: "6"
+  title: MCP server — containerization + deployment
+  description: >-
+    Write the Containerfile for Podman, configure the existing Apache
+    reverse proxy for TLS termination, inject env vars at container startup,
+    and emit one structured JSON log line per notify call to stdout per
+    AD-10. The MCP server listens on localhost inside the container. The
+    SQLite token store survives container restarts via volume mount. Covers
+    CAP-5.
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Podman container, not Docker. Apache is already in place — only add or
+    update the reverse proxy config for this route, do not deploy a new
+    proxy. MCP server listens on localhost:8080 inside the container.
+    Env vars: FCM_SERVICE_ACCOUNT_PATH, MCP_AUTH_TOKEN, ENROLLMENT_TOKEN,
+    TOKEN_DB_PATH (optional, default /data/device_token.db). Volume mount
+    /data for the SQLite token store. Server creates the device_token table
+    at startup before accepting requests. Log line schema: {request_id,
+    timestamp, result, error_type, latency_ms, fcm_message_id}. No file-based
+    logging except for the SQLite token store.
+
+- id: "7"
+  title: Android app — FCM reception + notification display
+  description: >-
+    Build the Firebase Messaging service that receives data-only FCM
+    messages and displays a system notification. onMessageReceived reads
+    title and short_message, builds the notification with
+    NotificationCompat.BigTextStyle, creates a notification channel with
+    IMPORTANCE_DEFAULT. Covers CAP-6.
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Data-only messages guarantee onMessageReceived fires in all app states
+    — do not use data+notification hybrid. BigTextStyle is mandatory so
+    short_message is fully visible without truncation. Channel ID is an
+    app-defined constant. The app MUST ignore any FCM data keys other than
+    title, short_message, detailed_message per AD-2. google-services.json
+    from Story 1. Kotlin, Firebase Messaging SDK latest stable.
+
+- id: "8"
+  title: Android app — detail view
+  description: >-
+    Add the detail view that opens when the user taps the notification.
+    The PendingIntent carries detailed_message as an extra; the detail
+    Activity displays it as full text. Covers CAP-7.
+  invoke_dev_with: >-
+    PendingIntent created in onMessageReceived with detailed_message as
+    string extra. Detail Activity/Fragment renders the full text in a
+    scrollable view. No actions, no history, no persistence in V1.
+
+- id: "9"
+  title: Android app — device token enrollment
+  description: >-
+    Implement FCM device token generation on first launch and automatic
+    enrollment with the MCP server via POST /enroll (Story 5). On token
+    rotation (onNewToken), the app re-enrolls automatically. No manual
+    copy-paste. Staleness is detected via fcm_unregistered error from the
+    MCP server. Covers CAP-8.
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Call FirebaseMessaging.getInstance().token on first launch, POST the
+    token to the MCP server /enroll endpoint (built in Story 5) via HTTP
+    with Authorization: Bearer ENROLLMENT_TOKEN header and body
+    {device_token: <token>}. Implement FirebaseMessagingService.onNewToken —
+    re-enroll the new token automatically. ENROLLMENT_TOKEN and the
+    enrollment endpoint URL are build-config values in the Android app (e.g.
+    BuildConfig or string resource), configured at build time. If the
+    enrollment endpoint is unreachable, surface the failure to the user and
+    retry with backoff. No manual UI token display needed — enrollment is
+    fully automatic. enrolled_at is metadata only — the app MUST NOT use it
+    for staleness detection. FCM UNREGISTERED (404) is the only staleness
+    signal.

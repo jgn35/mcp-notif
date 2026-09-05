@@ -1,0 +1,12 @@
+# Keep the Podman build context lean. The image only needs pyproject.toml + src/.
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+*.egg-info
+tests
+.git
+.gitignore
+.dockerignore
+*.md
