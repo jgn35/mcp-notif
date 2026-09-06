@@ -9,3 +9,6 @@ build/
 .idea/
 # Firebase config is per-project and must not be committed.
 app/google-services.json
+# Windows NTFS alternate-data-stream artifacts (e.g. from downloading
+# google-services.json from the Firebase console on Windows).
+*:Zone.Identifier
