@@ -1,0 +1,9 @@
+# Example values. Copy this file to android-app/local.properties (git-ignored)
+# and fill in your own. The app reads these at build time and injects them as
+# BuildConfig.ENROLL_URL and BuildConfig.ENROLL_TOKEN.
+#
+# enrollUrl: the HTTPS endpoint of your MCP server as reached from the phone
+#           (Apache TLS in front of the Podman container; do NOT use :8080 here).
+# enrollToken: the ENROLLMENT_TOKEN configured on the MCP server.
+mcpNotif.enrollUrl=https://notif.example.com
+mcpNotif.enrollToken=change-me

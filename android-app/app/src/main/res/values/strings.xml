@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">mcp-notif</string>
+    <string name="channel_name">Notifications</string>
+    <string name="channel_id">mcp_notif_default</string>
+    <string name="status_enrolled">Enrolled</string>
+    <string name="status_not_enrolled">Not enrolled</string>
+    <string name="status_error">Enrollment error</string>
+    <string name="endpoint_label">Endpoint</string>
+    <string name="error_label">Last error</string>
+    <string name="reenroll">Re-enroll</string>
+    <string name="enrolling">Enrolling…</string>
+</resources>

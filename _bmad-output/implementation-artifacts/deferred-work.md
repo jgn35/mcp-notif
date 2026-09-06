@@ -1,0 +1,5 @@
+# Deferred Work
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-android-fcm-receiver.md`
+  summary: Add an Android test suite verifying enrollment body/auth, retry classification, and FCM key handling.
+  evidence: The Android app has no tests (no JVM/Robolectric suite). The build host has no JDK/Android SDK/Gradle, so no test can run in this environment; the spec's `## Verification` section accepted static-inspection verification with tests deferred to the user's build host. Three verification gaps (Review Triage Log V1/V2/V3, all high): (1) a JVM test that the `POST /enroll` body equals `{"device_token": "<token>"}` and the `Authorization` header is `Bearer <ENROLLMENT_TOKEN>`; (2) a JVM test that 401 stops after 1 attempt and 503 retries to MAX_ATTEMPTS; (3) a Robolectric test of `McpNotifMessagingService.onMessageReceived` (reads only title/short_message/detailed_message, falls back to short_message in the detail intent, skips messages missing required keys). These would settle whether the client matches the server's accept contract, not just its reject contract.
