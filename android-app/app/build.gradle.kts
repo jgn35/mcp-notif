@@ -5,20 +5,31 @@ import org.gradle.api.attributes.Attribute
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
+}
+
+// google-services plugin requires google-services.json (git-ignored).
+// Only apply it when the file is present (local builds). CI skips it.
+if (rootProject.file("app/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) load(FileInputStream(f))
 }
+
+// In CI (no local.properties), use placeholder values so the build succeeds
+// without real enrollment credentials. Real builds require local.properties.
 val enrollUrl = localProps.getProperty("mcpNotif.enrollUrl")
-    ?: throw GradleException("Missing 'mcpNotif.enrollUrl' in android-app/local.properties")
-if (!enrollUrl.startsWith("https://")) {
-    throw GradleException("mcpNotif.enrollUrl must be an https:// URL")
-}
+    ?: "https://ci-placeholder.example.com"
 val enrollToken = localProps.getProperty("mcpNotif.enrollToken")
-    ?: throw GradleException("Missing 'mcpNotif.enrollToken' in android-app/local.properties")
+    ?: "ci-placeholder-token"
+
+if (rootProject.file("local.properties").exists()) {
+    if (!enrollUrl.startsWith("https://")) {
+        throw GradleException("mcpNotif.enrollUrl must be an https:// URL")
+    }
+}
 
 android {
     namespace = "com.jgn.mcpnotif"
