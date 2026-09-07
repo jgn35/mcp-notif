@@ -208,18 +208,21 @@ cd android-app
 cp local.properties.example local.properties   # then edit the two values
 # drop your Firebase google-services.json into app/
 ./gradlew assembleDebug        # or open in Android Studio and sync
+./gradlew testDebugUnitTest   # 17 JVM unit tests (no emulator needed)
 ```
 
-There is no Android test suite yet and no build verification in this repo's CI
-(no JDK/Android SDK on the build host); the app is verified by building on a
-machine with Android Studio.
+The Android test suite covers enrollment request shape and auth header, retry
+classification (401 stops, 503 retries to max), and FCM data-key selection with
+fallback. Tests run as plain JVM unit tests — no emulator or Robolectric needed.
 
 ## Status
 
 The MCP server spec is `done` (implemented + reviewed):
 `_bmad-output/implementation-artifacts/spec-mcp-notify-server.md`.
-The Android receiver app spec is `in-progress`:
+The Android receiver app spec is `done`:
 `_bmad-output/implementation-artifacts/spec-android-fcm-receiver.md`.
+The Android test suite spec is `in-progress`:
+`_bmad-output/implementation-artifacts/spec-android-fcm-test-suite.md`.
 
 Deferred (separate, per-environment builds): Firebase/FCM project setup
 (`google-services.json`), Podman/Apache deployment.
