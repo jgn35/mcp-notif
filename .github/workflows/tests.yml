@@ -48,17 +48,15 @@ jobs:
 
       - name: Set up Android SDK
         run: |
-          # ubuntu-latest ships with Android SDK cmdline-tools at $ANDROID_HOME
-          export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0"
 
       - name: Generate Gradle wrapper
         run: |
           chmod +x gradlew
-          # Ensure wrapper jar exists (regenerate if missing)
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "wrapper jar missing — downloading Gradle to regenerate"
             curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp
             /tmp/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1 --distribution-type bin
@@ -66,5 +64,3 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
-        env:
-          ANDROID_HOME: ${ANDROID_HOME:-/usr/local/lib/android/sdk}
