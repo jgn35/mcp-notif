@@ -24,7 +24,7 @@ object EnrollmentState {
     fun snapshot(): Snapshot = ref.get()
 
     fun setEnrolling() {
-        ref.updateAndGet { it.copy(state = State.ENROLLING, lastError = null) }
+        ref.updateAndGet { it.copy(state = State.ENROLLING, deviceToken = null, lastError = null) }
     }
 
     fun setSuccess(deviceToken: String) {
@@ -32,6 +32,6 @@ object EnrollmentState {
     }
 
     fun setError(message: String) {
-        ref.updateAndGet { it.copy(state = State.ERROR, lastError = message) }
+        ref.updateAndGet { it.copy(state = State.ERROR, deviceToken = null, lastError = message) }
     }
 }

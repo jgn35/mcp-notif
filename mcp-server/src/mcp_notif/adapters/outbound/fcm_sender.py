@@ -12,6 +12,7 @@ credentials are ever needed.
 from __future__ import annotations
 
 import asyncio
+import threading
 
 from ...errors import ErrorType, NotifyError
 from ...ports import FcmError
@@ -69,21 +70,35 @@ class FirebaseFcmSender:
     def __init__(self, service_account_path: str | None) -> None:
         self._service_account_path = service_account_path
         self._app = None
+        self._lock = threading.Lock()
 
     def _ensure_app(self):
         if self._app is not None:
             return
-        from firebase_admin import credentials, initialize_app
+        with self._lock:
+            if self._app is not None:
+                return
+            from firebase_admin import credentials, initialize_app
 
-        if not self._service_account_path:
-            raise FcmError(
-                NotifyError(
-                    ErrorType.FCM_PERMISSION_DENIED,
-                    "FCM_SERVICE_ACCOUNT_PATH is not configured.",
+            if not self._service_account_path:
+                raise FcmError(
+                    NotifyError(
+                        ErrorType.FCM_PERMISSION_DENIED,
+                        "FCM_SERVICE_ACCOUNT_PATH is not configured.",
+                    )
                 )
-            )
-        cred = credentials.Certificate(self._service_account_path)
-        self._app = initialize_app(cred, name="mcp-notif-fcm")
+            try:
+                cred = credentials.Certificate(self._service_account_path)
+                self._app = initialize_app(cred, name="mcp-notif-fcm")
+            except FcmError:
+                raise
+            except Exception as exc:
+                raise FcmError(
+                    NotifyError(
+                        ErrorType.FCM_PERMISSION_DENIED,
+                        f"Invalid FCM service account: {exc}",
+                    )
+                ) from exc
 
     async def send(self, device_token: str, data: dict[str, str]) -> str:
         return await asyncio.to_thread(self._send_sync, device_token, data)
@@ -95,9 +110,13 @@ class FirebaseFcmSender:
         try:
             self._ensure_app()
             # data-only message: no `notification` field is set.
-            # firebase-admin 7.5 targets a device instance via `fid` (the FCM
-            # registration/installation token); `token` is deprecated.
-            message = messaging.Message(data=data, fid=device_token)
+            # `token` accepts the FCM registration token that the Android app
+            # obtains via FirebaseMessaging.getInstance().token.  firebase-admin
+            # 7.5 deprecates `token` in favor of `fid` (Firebase Installation ID),
+            # but `fid` expects a different identifier — using it with an FCM
+            # registration token causes fcm_unregistered.  `token` still works
+            # during the migration period.
+            message = messaging.Message(data=data, token=device_token)
             return messaging.send(message, app=self._app)
         except FcmError:
             raise

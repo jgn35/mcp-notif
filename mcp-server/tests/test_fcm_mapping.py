@@ -74,11 +74,12 @@ async def test_adapter_maps_unregistered_error(monkeypatch):
     with pytest.raises(FcmError) as exc:
         await sender.send("device-token", _PAYLOAD)
     assert exc.value.notify_error.type is ErrorType.FCM_UNREGISTERED
-    # The real Message must target the device via fid (non-deprecated) and carry
-    # exactly the data-only payload from the core.
+    # The real Message must target the device via token (FCM registration
+    # token from the Android app) and carry exactly the data-only payload
+    # from the core.
     assert len(captured) == 1
-    assert captured[0].fid == "device-token"
-    assert captured[0].token is None
+    assert captured[0].token == "device-token"
+    assert captured[0].fid is None
     assert captured[0].data == _PAYLOAD
 
 
