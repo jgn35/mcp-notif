@@ -1,9 +1,9 @@
 package com.jgn.mcpnotif
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Before
+import org.junit.Test
 
 /**
  * JVM unit tests for [EnrollmentState] — verifies that setSuccess stores the
@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
  */
 class EnrollmentStateTest {
 
-    @BeforeEach
+    @Before
     fun reset() {
         EnrollmentState.setError("reset")
     }
