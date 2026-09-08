@@ -47,21 +47,10 @@ jobs:
           java-version: 17
 
       - name: Set up Android SDK
-        run: |
-          export ANDROID_HOME="/usr/local/lib/android/sdk"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          # Check if cmdline-tools exists; download if missing
-          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "cmdline-tools not found, downloading..."
-            mkdir -p /tmp/cmdline-tools
-            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip
-            unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
-            mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
-            mv /tmp/cmdline-tools/cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
-          fi
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0"
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: 'tools platform-tools platforms;android-37 build-tools;36.0.0'
 
       - name: Generate Gradle wrapper
         run: |
