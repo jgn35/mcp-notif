@@ -76,6 +76,7 @@ class McpNotifMessagingService : FirebaseMessagingService() {
 
     private fun postNotification(content: NotificationContent) {
         val fields = mapToFields(content)
+        val id = notificationId()
         val intent = Intent(this, DetailActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(DetailActivity.EXTRA_TITLE, fields.titleExtra)
@@ -85,7 +86,7 @@ class McpNotifMessagingService : FirebaseMessagingService() {
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                 PendingIntent.FLAG_IMMUTABLE else 0)
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, pendingFlags
+            this, id, intent, pendingFlags
         )
 
         val notification = NotificationCompat.Builder(this, getString(R.string.channel_id))
@@ -98,7 +99,7 @@ class McpNotifMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(this).notify(notificationId(), notification)
+        NotificationManagerCompat.from(this).notify(id, notification)
     }
 
     /** Unique per message so a new notification does not overwrite a prior one. */

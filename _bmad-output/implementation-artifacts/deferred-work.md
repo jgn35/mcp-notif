@@ -14,3 +14,8 @@
 
 - `app.py:59` module-level `app = create_app()` executes side effects at import. Pre-existing; `create_app()` factory allows test injection, so tests can avoid the module-level app.
 - `mcp_transport.py:27` auth disabled when `mcp_auth_token` is empty. Pre-existing; guarded by `cfg.require_auth_tokens()` in lifespan startup.
+
+## Deferred from: code review of spec-android-fcm-receiver — display bug (2026-09-08)
+
+- Verification gap: `postNotification` builder chain and `putExtra` intent wiring unverified [McpNotifMessagingService.kt:77-101]. Tests cover pure helpers only (`extractContent`, `mapToFields`); the `NotificationCompat.Builder` field placement and `Intent.putExtra` calls are framework-bound and cannot be JVM-tested without Robolectric (excluded per spec). Grouped with prior V1/V2/V3.
+- `NotificationFields` data class adds an indirection layer with no runtime value [McpNotifMessagingService.kt:22-59]. `mapToFields` produces a 1:1 rename of `NotificationContent` fields. Enables unit testing of the mapping but `postNotification` could read directly from `NotificationContent`. Design concern, no user-facing harm; refactor, not a direct correction.
