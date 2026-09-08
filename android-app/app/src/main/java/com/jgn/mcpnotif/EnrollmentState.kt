@@ -13,11 +13,12 @@ object EnrollmentState {
     data class Snapshot(
         val state: State,
         val endpoint: String,
+        val deviceToken: String?,
         val lastError: String?,
     )
 
     private val ref = AtomicReference(
-        Snapshot(state = State.NOT_ENROLLED, endpoint = BuildConfig.ENROLL_URL, lastError = null)
+        Snapshot(state = State.NOT_ENROLLED, endpoint = BuildConfig.ENROLL_URL, deviceToken = null, lastError = null)
     )
 
     fun snapshot(): Snapshot = ref.get()
@@ -26,8 +27,8 @@ object EnrollmentState {
         ref.updateAndGet { it.copy(state = State.ENROLLING, lastError = null) }
     }
 
-    fun setSuccess() {
-        ref.updateAndGet { it.copy(state = State.ENROLLED, lastError = null) }
+    fun setSuccess(deviceToken: String) {
+        ref.updateAndGet { it.copy(state = State.ENROLLED, deviceToken = deviceToken, lastError = null) }
     }
 
     fun setError(message: String) {

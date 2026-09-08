@@ -43,6 +43,8 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.endpoint).text =
             "${getString(R.string.endpoint_label)}: ${s.endpoint}"
+        findViewById<TextView>(R.id.token).text =
+            s.deviceToken?.let { "${getString(R.string.token_label)}: $it" } ?: ""
         findViewById<TextView>(R.id.error).text =
             s.lastError?.let { "${getString(R.string.error_label)}: $it" } ?: ""
     }
