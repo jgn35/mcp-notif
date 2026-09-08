@@ -7,6 +7,7 @@
     <string name="status_not_enrolled">Not enrolled</string>
     <string name="status_error">Enrollment error</string>
     <string name="endpoint_label">Endpoint</string>
+    <string name="token_label">FCM Token</string>
     <string name="error_label">Last error</string>
     <string name="reenroll">Re-enroll</string>
     <string name="enrolling">Enrolling…</string>

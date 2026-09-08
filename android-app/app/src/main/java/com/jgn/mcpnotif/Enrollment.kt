@@ -36,7 +36,7 @@ object Enrollment {
     suspend fun enrollToken(deviceToken: String) {
         EnrollmentState.setEnrolling()
         when (val r = EnrollmentClient.enroll(deviceToken)) {
-            is EnrollmentClient.Result.Success -> EnrollmentState.setSuccess()
+            is EnrollmentClient.Result.Success -> EnrollmentState.setSuccess(deviceToken)
             is EnrollmentClient.Result.Failure -> EnrollmentState.setError(r.message)
         }
     }

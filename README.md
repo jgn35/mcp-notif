@@ -159,11 +159,11 @@ android-app/
         MainActivity.kt               enrollment status screen + manual Re-enroll
         DetailActivity.kt            shows detailed_message (fallback: short_message)
       res/
-        layout/activity_main.xml     status + endpoint + error + re-enroll button
+        layout/activity_main.xml     status + endpoint + FCM token + error + re-enroll button
         layout/activity_detail.xml    title + scrollable detailed message
         drawable/ic_launcher.xml      app icon (vector)
         drawable/ic_notification.xml  notification small icon (vector)
-        values/strings.xml           app name, channel id/name, status strings
+        values/strings.xml           app name, channel id/name, status + token labels
         values/themes.xml            Theme.McpNotif (AppCompat DayNight)
         values/colors.xml            launcher background
 ```
