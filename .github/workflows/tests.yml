@@ -33,7 +33,7 @@ jobs:
 
   android-tests:
     name: Android tests (Gradle)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: android-app
@@ -47,17 +47,26 @@ jobs:
           java-version: 17
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          accept-android-sdk-licenses: true
-          packages: 'tools platform-tools platforms;android-37 build-tools;36.0.0'
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          SDKMGR="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMGR" ]; then
+            echo "sdkmanager not found at $SDKMGR, downloading cmdline-tools"
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" -o /tmp/cmdtools.zip
+            cd /tmp && unzip -qo cmdtools.zip
+            mv /tmp/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" "build-tools;36.0.0"
 
       - name: Generate Gradle wrapper
         run: |
           chmod +x gradlew
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
             curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
-            unzip -q /tmp/gradle.zip -d /tmp
+            cd /tmp && unzip -qo gradle.zip
             /tmp/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           fi
 
