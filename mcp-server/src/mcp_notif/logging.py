@@ -32,8 +32,7 @@ def log_notify(result: NotifyResult, *, request_id: str, latency_ms: int) -> Non
     }
     if result.ok:
         line["fcm_message_id"] = result.message_id
-    else:
-        assert result.error is not None
+    elif result.error is not None:
         line["error_type"] = result.error.type.value
     sys.stdout.write(json.dumps(line) + "\n")
     sys.stdout.flush()

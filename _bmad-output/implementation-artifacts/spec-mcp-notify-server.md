@@ -106,7 +106,7 @@ New tree (package `mcp_notif`, src layout, uv + pyproject):
 - Built under `mcp-server/` with uv + src-layout package `mcp_notif`. Deps: `fastmcp>=4.0,<5`, `firebase-admin>=7.5,<8`, `uvicorn`; dev: pytest, pytest-asyncio, httpx, ruff. Python >=3.12 (env runs 3.13).
 - FastMCP resolved to 4.0.3 (latest stable, not beta). MCP transport: `mcp.http_app(path="/")` mounted at `Mount("/mcp", mcp_app)`; the composed `lifespan` runs `config.require_auth_tokens()` + `store.init()` then `async with mcp_app.lifespan(app)`. MCP auth via `StaticTokenVerifier` from `fastmcp.server.auth` (the configured `MCP_AUTH_TOKEN`).
 - Used **Starlette directly** (not FastAPI) — FastMCP's `http_app()` already returns a Starlette app, so no extra web-framework dependency. `POST /enroll` is a Starlette `Route`; it reads `token_store` and `enrollment_token` from `app.state`, validates body (exactly `{"device_token": str}`, non-empty), returns 200/401/400.
-- firebase-admin **7.5.0 deprecates `Message.token` in favor of `Message.fid`** (the device-instance target field). The sender uses `messaging.Message(data=data, fid=device_token)` — the non-deprecated API. `token` would still work but emits a DeprecationWarning.
+- firebase-admin **7.5.0 deprecates `Message.token` in favor of `Message.fid`**, but `fid` expects a Firebase Installation ID (not an FCM registration token). The sender uses `messaging.Message(data=data, token=device_token)` — `token` still accepts FCM registration tokens during the migration period and avoids `fcm_unregistered`.
 - `FcmError` lives in `ports.py` (domain) rather than the fcm adapter, so the core depends only on ports — never on firebase-admin. The adapter raises `FcmError(NotifyError)` after mapping firebase exceptions; the core surfaces `error.to_dict()` to the LLM (never raises on FCM failure — the LLM decides retry).
 - Verification: `uv run pytest` -> 55 passed (no network, no Google creds); `uv run ruff check .` -> clean; `uv run python -c "import mcp_notif.app"` -> resolves (`Starlette`). Fakes: a `FakeFcmSender` records sends; real firebase exception classes are used in mapping tests; the adapter is exercised with `messaging.send` monkeypatched.
 - No VCS in this repo (`baseline_commit: NO_VCS`); the stage-diff step was skipped — tasks/AC were verified against the files on disk.
@@ -119,8 +119,8 @@ New tree (package `mcp_notif`, src layout, uv + pyproject):
 - `Containerfile` (B3): pinned the uv image to `ghcr.io/astral-sh/uv:0.11.15`.
 - `.dockerignore` (B2): added to keep the Podman build context lean (excludes `.venv`, caches, `tests`).
 - Docstrings (B10): corrected "FastAPI app" → "Starlette app" in `conftest.make_app` and `test_app`.
-- Tests: added `UnauthenticatedError` → `FCM_PERMISSION_DENIED` to the mapping table (B12/V2); assert the real `Message` is built with `fid=device_token` + `data == _PAYLOAD` and `token is None` (V3); added a test that `create_app` with empty tokens raises `RuntimeError` at lifespan startup (V1).
-- Re-verified: `uv run pytest` -> 57 passed; `uv run ruff check .` -> clean; `import mcp_notif.app` -> OK. Empirically confirmed (against the pinned firebase-admin 7.5.0): `Message(token=...)` is deprecated and `Message(fid=...)` is the directed field; a fresh `sqlite3.connect()` defaults `busy_timeout` to 5000.
+- Tests: added `UnauthenticatedError` → `FCM_PERMISSION_DENIED` to the mapping table (B12/V2); assert the real `Message` is built with `token=device_token` + `data == _PAYLOAD` and `fid is None` (V3); added a test that `create_app` with empty tokens raises `RuntimeError` at lifespan startup (V1).
+- Re-verified: `uv run pytest` -> 57 passed; `uv run ruff check .` -> clean; `import mcp_notif.app` -> OK. Empirically confirmed (against the pinned firebase-admin 7.5.0): `Message(fid=...)` expects a Firebase Installation ID, not an FCM registration token — using it with an FCM token causes `fcm_unregistered`; `Message(token=...)` is the correct field for FCM registration tokens. A fresh `sqlite3.connect()` defaults `busy_timeout` to 5000.
 
 ## Spec Change Log
 
@@ -169,3 +169,31 @@ Error type → FCM status mapping: 404 → `fcm_unregistered`, 400 → `fcm_inva
 **Manual checks (if no CLI):**
 - Inspect that the FCM payload builder never sets a `notification` key and only the three `data` keys.
 - Inspect that every new SQLite connection sets WAL + busy_timeout.
+
+### Review Findings
+
+**Review 2 (2026-09-08): triggered by `fcm_unregistered` bug after Android FCM-token display change.**
+
+Patch findings:
+- [x] [Review][Patch] **fid vs token in fcm_sender.py** [mcp-server/src/mcp_notif/adapters/outbound/fcm_sender.py:100] — `fid` expects a Firebase Installation ID, not an FCM registration token. The Android app sends an FCM registration token via `FirebaseMessaging.getInstance().token`. FCM rejects it as `UNREGISTERED`. Overrides previous review B6 (which wrongly concluded `fid` was correct). Fix: use `token=device_token`; update test_fcm_mapping.py:80 to assert `.token`; update comment and Implementation Notes.
+- [x] [Review][Patch] **_ensure_app() data race** [mcp-server/src/mcp_notif/adapters/outbound/fcm_sender.py:73-86] — No lock around check-and-initialize; concurrent first sends can both call `initialize_app`, second raises `ValueError` caught as `NETWORK_ERROR`. Fix: add `threading.Lock`.
+- [x] [Review][Patch] **_ensure_app() error misclassification** [mcp-server/src/mcp_notif/adapters/outbound/fcm_sender.py:73-86] — `credentials.Certificate()` / `initialize_app()` non-Firebase errors (invalid service account file) fall through to `NETWORK_ERROR` instead of `FCM_PERMISSION_DENIED`. Fix: catch in `_ensure_app` and raise `FcmError(FCM_PERMISSION_DENIED)`.
+- [x] [Review][Patch] **Stale deviceToken in EnrollmentState** [android-app/.../EnrollmentState.kt:28,42] — `setEnrolling()` and `setError()` don't clear `deviceToken`; UI shows stale token during re-enroll/error. Fix: set `deviceToken = null` in both.
+- [x] [Review][Patch] **assert stripped under python -O** [mcp-server/src/mcp_notif/adapters/inbound/mcp_transport.py:59, logging.py:36] — `assert result.error is not None` vanishes under `-O`; replace with `if` guard.
+- [x] [Review][Patch] **Missing test for EnrollmentState.setSuccess** [android-app/...] — No test verifies that `setSuccess(token)` stores the token in `Snapshot`. Fix: add `EnrollmentStateTest.kt`.
+- [x] [Review][Patch] **ports.py docstring inaccuracy** [mcp-server/src/mcp_notif/ports.py:38-41] — Says "core maps it to an ErrorType" but the adapter does the mapping; core just unwraps `FcmError`. Fix: update docstring to mention `FcmError`.
+
+Defer findings:
+- [x] [Review][Defer] **app.py module-level side effects** [mcp-server/src/mcp_notif/app.py:59] — deferred: pre-existing; `create_app()` factory allows test injection.
+- [x] [Review][Defer] **Auth disabled when mcp_auth_token empty** [mcp-server/src/mcp_notif/adapters/inbound/mcp_transport.py:27] — deferred: pre-existing; guarded by `cfg.require_auth_tokens()` in lifespan.
+
+Rejected:
+- Broad `except Exception` in notify.py — safety net; specific exceptions caught first.
+- `Bearer` case-sensitive in enroll.py — only client (Android) sends "Bearer" correctly.
+- `PRAGMA journal_mode=WAL` per connection — harmless redundancy; WAL is persistent at DB level.
+- `send()` returns None — unreachable per `FcmSender.send() -> str` Protocol.
+- No tests in diff — tests exist (57 passing); not in the diff by scope selection.
+- Android changes in server-spec diff — review scope, not a code defect.
+- Logging conditional omission of `error_type`/`fcm_message_id` — correct behavior.
+- enroll.py unhandled `token_store.write()` exception — previously rejected (E1/O2); Android retries 500 with backoff.
+- `token_store._init()` doesn't wrap `DatabaseError` — previously rejected (E2); corrupt store should prevent startup.

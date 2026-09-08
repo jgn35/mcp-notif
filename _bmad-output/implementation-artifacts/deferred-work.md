@@ -9,3 +9,8 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-android-fcm-test-suite.md`
   summary: Cancel service `scope` in `onDestroy` to prevent coroutine leak when `onNewToken` enrollment is in flight.
   evidence: Pre-existing; already triaged as reject (item J) in the receiver spec. Coroutines are short-lived and the service is app-lifetime; the leak is minimal. Low severity.
+
+## Deferred from: code review of spec-mcp-notify-server (2026-09-08)
+
+- `app.py:59` module-level `app = create_app()` executes side effects at import. Pre-existing; `create_app()` factory allows test injection, so tests can avoid the module-level app.
+- `mcp_transport.py:27` auth disabled when `mcp_auth_token` is empty. Pre-existing; guarded by `cfg.require_auth_tokens()` in lifespan startup.

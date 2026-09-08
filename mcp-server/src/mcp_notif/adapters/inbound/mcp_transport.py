@@ -56,7 +56,8 @@ def build_mcp_server(
         log_notify(result, request_id=request_id, latency_ms=latency_ms)
         if result.ok:
             return {"message_id": result.message_id}
-        assert result.error is not None
-        return result.error.to_dict()
+        if result.error is not None:
+            return result.error.to_dict()
+        return {"error": {"type": "fcm_internal", "message": "No result returned."}}
 
     return mcp

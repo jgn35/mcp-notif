@@ -37,6 +37,7 @@ class FcmSender(Protocol):
     async def send(self, device_token: str, data: dict[str, str]) -> str:
         """Send a data-only FCM message. Returns the FCM message id.
 
-        Raises an exception on failure; the core maps it to an ErrorType.
+        Raises ``FcmError`` (carrying a mapped ``NotifyError``) on failure;
+        the core unwraps and surfaces it to the LLM.
         """
         ...
