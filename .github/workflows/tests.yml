@@ -33,10 +33,13 @@ jobs:
 
   android-tests:
     name: Android tests (Gradle)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: android-app
+    env:
+      CI_COMPILE_SDK: "35"
+      ANDROID_HOME: /usr/local/lib/android/sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -48,18 +51,17 @@ jobs:
 
       - name: Set up Android SDK
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
-          SDKMGR="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMGR" ]; then
-            echo "sdkmanager not found at $SDKMGR, downloading cmdline-tools"
-            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            echo "sdkmanager not found, downloading cmdline-tools"
+            mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
             curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip" -o /tmp/cmdtools.zip
             cd /tmp && unzip -qo cmdtools.zip
-            mv /tmp/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+            mv /tmp/cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
           fi
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37" "build-tools;36.0.0"
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Generate Gradle wrapper
         run: |

@@ -33,12 +33,14 @@ if (rootProject.file("local.properties").exists()) {
 
 android {
     namespace = "com.jgn.mcpnotif"
-    compileSdk = 37
+    // CI uses API 35 (widely available); local builds use 37 (installed on the dev machine).
+    val sdkVersion = (System.getenv("CI_COMPILE_SDK") ?: "37").toInt()
+    compileSdk = sdkVersion
 
     defaultConfig {
         applicationId = "com.jgn.mcpnotif"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = sdkVersion
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "ENROLL_URL", "\"${enrollUrl}\"")
