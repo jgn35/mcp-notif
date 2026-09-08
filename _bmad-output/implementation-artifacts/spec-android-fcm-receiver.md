@@ -294,3 +294,67 @@ left to the user's build host; flagged for step-04.
   `onMessageReceived` unverified — **high, defer**. Same root cause as V1; a
   Robolectric test of `onMessageReceived` with `ShadowNotificationManager`.
   Requires the Android toolchain on the build host. Grouped with V1/V2.
+
+### Review Findings (2026-09-08 — display bug review)
+
+Review target: full file contents of Android notification/display code
+(McpNotifMessagingService.kt, DetailActivity.kt, activity_detail.xml,
+MainActivity.kt, activity_main.xml, AndroidManifest.xml, strings.xml,
+themes.xml). Triggered by user-reported display bug: "Le message détaillé
+commence à s'afficher sous le titre de l'application."
+
+- [x] [Review][Patch] PendingIntent request code 0 opens detail for the
+  latest notification, not the tapped one [McpNotifMessagingService.kt:88].
+  All notifications share request code 0 with FLAG_UPDATE_CURRENT, so the
+  PendingIntent extras are overwritten by each new notification. Tapping an
+  older notification opens DetailActivity with the newest notification's
+  title and detailed_message. Fix: use `notificationId()` as the request
+  code so each notification gets its own PendingIntent. **Applied 2026-09-08.**
+- [x] [Review][Defer] notificationId() collision — same-millisecond
+  overwrite [McpNotifMessagingService.kt:105-106] — deferred: pre-existing,
+  already in deferred-work.md from prior review; unlikely in everyday use.
+- [x] [Review][Defer] CoroutineScope never cancelled in onDestroy
+  [McpNotifMessagingService.kt:17] — deferred: pre-existing, already
+  rejected as item J in prior review; coroutines are short-lived and the
+  service is app-lifetime.
+- [x] [Review][Defer] Verification gap: postNotification builder/intent
+  wiring unverified [McpNotifMessagingService.kt:77-101] — deferred:
+  tests cover pure helpers only (extractContent, mapToFields); the
+  builder chain and putExtra wiring are framework-bound and cannot be
+  JVM-tested without Robolectric (excluded per spec). Grouped with V1/V2/V3
+  from prior review.
+- [x] [Review][Defer] NotificationFields indirection adds a mapping layer
+  with no runtime value [McpNotifMessagingService.kt:22-59] — deferred:
+  design concern, no user-facing harm; enables unit testing of the
+  mapping but could be read directly from NotificationContent. Refactor,
+  not a direct correction.
+
+#### Rejected
+
+- No NotificationChannel created — `false`: channel is created in
+  McpNotifApplication.kt:19-29 (not in the review file list but exists and
+  works).
+- McpNotifApplication not in diff — `false`: file exists at
+  android-app/app/src/main/java/com/jgn/mcpnotif/McpNotifApplication.kt;
+  was not in the review scope.
+- POST_NOTIFICATIONS crash on denied permission — `false`:
+  NotificationManagerCompat.notify() silently no-ops when notifications
+  are disabled (prior review item H).
+- No build.gradle / icon resources in diff — `false`: files exist but
+  were not in the review scope.
+- DetailActivity intent extras lost on rotation/process death — `false`:
+  Android preserves the original intent extras across recreation.
+- Main thread block from onNewToken → enrollToken — `false`:
+  EnrollmentClient.enrollOnce uses withContext(Dispatchers.IO) for network
+  I/O.
+- Non-IOException RuntimeException crash — `false`: IOException is caught;
+  remaining RuntimeException paths (ClassCastException from non-HTTP URL)
+  were addressed in prior review (item E, build-time HTTPS validation).
+- detailed_message treated as optional on client — `false`: the fallback
+  to short_message is specified behavior (I/O matrix row 3: "If
+  detailed_message missing, show short_message").
+- Whitespace-only title/short_message passes validation — `low`, rejected:
+  unlikely in everyday use (LLM controls content); fix (isNullOrBlank) is
+  a guard for an edge case that won't occur in practice.
+- tools:ignore="HardcodedText" on TextViews with no android:text — `low`,
+  rejected: cosmetic lint noise, no runtime or developer harm.
