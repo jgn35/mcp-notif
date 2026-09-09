@@ -2,7 +2,7 @@
 title: "mcp-notif — Solution Design"
 status: final
 created: 2026-09-04
-updated: 2026-09-04 (enrollment update)
+updated: 2026-09-09 (markdown rendering update)
 based_on: ARCHITECTURE-SPINE.md
 ---
 
@@ -28,7 +28,7 @@ LLM scheduler fires
   -> MCP server pushes data-only FCM message via firebase-admin SDK
   -> FCM delivers push to Android device
   -> Android FirebaseMessagingService.onMessageReceived builds system notification
-  -> User taps notification -> detail view shows detailed_message
+  -> User taps notification -> detail view shows detailed_message rendered as markdown
 ```
 
 **Enrollment flow (back-channel):**
@@ -144,7 +144,7 @@ The MCP `notify` tool accepts exactly three string fields:
 | `short_message` | string | 500 | Yes, non-empty |
 | `detailed_message` | string | 3500 | Yes, non-empty |
 
-The MCP server validates all field lengths before sending to FCM. Oversized payloads return a `validation_error` (see Error Handling). Limits account for FCM's 4 KB total data payload constraint.
+The MCP server validates all field lengths before sending to FCM. Oversized payloads return a `validation_error` (see Error Handling). Limits account for FCM's 4 KB total data payload constraint. The `detailed_message` field supports markdown formatting (AD-14) — the `notify` tool description tells the LLM it can use markdown syntax (headings, bold, lists, code blocks, links). The server does not parse or validate markdown; it passes the string as-is. Markdown syntax characters count toward the 3500-byte limit.
 
 ### 3.2 FCM message contract (AD-2)
 
@@ -169,6 +169,8 @@ The Android app's `FirebaseMessagingService.onMessageReceived`:
 4. Notification channel: `IMPORTANCE_DEFAULT`, channel ID is an app-defined constant
 
 The Android app MUST ignore any FCM data keys other than these three. The MCP server MUST NOT add extra data keys.
+
+The detail view (`DetailActivity`) renders `detailed_message` as formatted markdown using the Markwon library (AD-14) — not as raw text. The supported dialect is CommonMark only (Markwon core, no plugins): headings, bold, italic, lists, fenced code blocks, inline code, links, blockquotes, horizontal rules. GFM extensions (tables, strikethrough, task lists) and raw HTML are not supported. Links are clickable (`LinkMovementMethod`). The system notification body (`BigTextStyle`) shows `short_message` as plain text; Android system notifications cannot render markdown. The `notify` tool docstring must indicate that `detailed_message` supports markdown and `short_message` does not.
 
 ### 3.3 Enrollment endpoint (AD-12)
 
@@ -351,6 +353,7 @@ No explicit health-check endpoint in V1. Apache connection errors serve as the l
 | Token store | SQLite (stdlib `sqlite3`) | bundled with Python (WAL mode) |
 | Android app language | Kotlin | latest stable |
 | Android push SDK | Firebase Messaging | latest stable |
+| Android markdown rendering | Markwon | 4.6.2 (`io.noties.markwon` — no WebView, native Spans) |
 | Reverse proxy / TLS | Apache | already in place |
 | Container runtime | Podman | latest stable |
 
@@ -384,3 +387,4 @@ No explicit health-check endpoint in V1. Apache connection errors serve as the l
 | AD-11 | Device token lifecycle via enrollment | onNewToken triggers POST /enroll; automated rotation in V1 |
 | AD-12 | Enrollment endpoint (POST /enroll) | Plain HTTP, separate ENROLLMENT_TOKEN; Android doesn't speak MCP |
 | AD-13 | SQLite token store (WAL, single row) | Volume-mounted persistence; concurrent-safe; startup-created |
+| AD-14 | Markdown rendering for `detailed_message` | Convention (no flag); CommonMark only via Markwon core; Android renders in detail view; links clickable; plain text backward compatible; `short_message` stays plain text |

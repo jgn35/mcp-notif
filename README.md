@@ -67,11 +67,15 @@ any FCM call:
 |--------------------|-----------|----------|
 | `title`            | 100       | non-empty |
 | `short_message`    | 500       | non-empty |
-| `detailed_message` | 3500      | non-empty |
+| `detailed_message` | 3500      | non-empty (Markdown, rendered by the Android app) |
 
 Returns `{"message_id": "..."}` on success, or
 `{"error": {"type": ..., "message": ...}}` on failure. The server never retries;
 the LLM decides retry vs. skip from `error.type`.
+
+`detailed_message` supports Markdown (headings, bold, italic, lists, code blocks,
+links, tables, strikethrough). The Android app renders it as formatted text in the
+detail view. `short_message` is shown as plain text in the system notification.
 
 **`POST /enroll`** — `Authorization: Bearer <ENROLLMENT_TOKEN>`,
 body `{"device_token": "<str>"}`. 200 `{"status":"enrolled"}` (overwrites the
@@ -157,10 +161,10 @@ android-app/
         EnrollmentState.kt            in-memory status read by MainActivity
         McpNotifMessagingService.kt   onMessageReceived -> BigTextStyle; onNewToken -> re-enroll
         MainActivity.kt               enrollment status screen + manual Re-enroll
-        DetailActivity.kt            shows detailed_message (fallback: short_message)
+        DetailActivity.kt            renders detailed_message as Markdown (fallback: short_message)
       res/
         layout/activity_main.xml     status + endpoint + FCM token + error + re-enroll button
-        layout/activity_detail.xml    title + scrollable detailed message
+        layout/activity_detail.xml    title + scrollable Markdown detailed message
         drawable/ic_launcher.xml      app icon (vector)
         drawable/ic_notification.xml  notification small icon (vector)
         values/strings.xml           app name, channel id/name, status + token labels
@@ -174,7 +178,7 @@ android-app/
   from `remoteMessage.data`; ignores any other keys. Builds the notification
   in `onMessageReceived` (data-only handling — fires in foreground and
   background). Tap opens `DetailActivity` with `detailed_message` (falls back
-  to `short_message` if absent).
+  to `short_message` if absent), rendered as Markdown.
 - **Enrollment:** `POST /enroll` with `Authorization: Bearer <ENROLLMENT_TOKEN>`,
   body exactly `{"device_token": "<str>"}`. Retries transient failures
   (network, 5xx) with exponential backoff; stops on 400/401 (bad body / bad
@@ -208,7 +212,7 @@ cd android-app
 cp local.properties.example local.properties   # then edit the two values
 # drop your Firebase google-services.json into app/
 ./gradlew assembleDebug        # or open in Android Studio and sync
-./gradlew testDebugUnitTest   # 17 JVM unit tests (no emulator needed)
+./gradlew testDebugUnitTest   # 20 JVM unit tests (no emulator needed)
 ```
 
 The Android test suite covers enrollment request shape and auth header, retry

@@ -38,7 +38,8 @@ def build_mcp_server(
         Args:
             title: Short notification title (<= 100 UTF-8 bytes).
             short_message: Body shown in the system notification (<= 500 bytes).
-            detailed_message: Full text shown when the notification is tapped (<= 3500 bytes).
+            detailed_message: Full text (Markdown) shown when the notification is
+                tapped (<= 3500 bytes).
 
         Returns:
             `{"message_id": "..."}` on success, or `{"error": {"type": ..., "message": ...}}`.
