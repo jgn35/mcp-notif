@@ -20,3 +20,7 @@ dist/
 .idea/
 .vscode/
 .DS_Store
+
+# Deployment secrets — never commit
+mcp-server/.env
+mcp-server/fcm-service-account.json
