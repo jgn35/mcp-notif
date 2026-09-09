@@ -47,7 +47,7 @@ Personal project, monouser, self-hosted. The notification infrastructure is gene
 
 - **CAP-7**
   - **intent:** The user can read the detailed message by tapping the notification.
-  - **success:** Tapping the notification opens a detail view displaying `detailed_message` as full text.
+  - **success:** Tapping the notification opens a detail view displaying `detailed_message` rendered as formatted markdown (headings, bold, italic, lists, code blocks, links) — not raw syntax.
 
 - **CAP-8**
   - **intent:** The Android app automatically registers its FCM device token with the MCP server so the server always has a valid delivery target without manual configuration.
@@ -56,6 +56,10 @@ Personal project, monouser, self-hosted. The notification infrastructure is gene
 - **CAP-9**
   - **intent:** The MCP server accepts and persists the FCM device token from the Android app so the notify tool can target the correct device without manual env var configuration.
   - **success:** A `POST /enroll` with a valid `ENROLLMENT_TOKEN` bearer token and a `device_token` field writes the token to the SQLite store (overwrite — last enrollment wins); a request without the correct `ENROLLMENT_TOKEN` receives HTTP 401; a request with a missing `device_token` receives HTTP 400. The next `notify` call reads the stored token from SQLite and sends via FCM successfully.
+
+- **CAP-10**
+  - **intent:** The LLM can send markdown-formatted text in `detailed_message` and the Android app renders it as formatted markdown in the detail view.
+  - **success:** A `notify` call with `detailed_message` containing markdown syntax (headings, bold, lists, code blocks, links) results in the detail view showing rendered formatted text, not raw markdown syntax. Plain-text messages render unchanged (markdown is a superset of plain text).
 
 ## Constraints
 
@@ -70,6 +74,9 @@ Personal project, monouser, self-hosted. The notification infrastructure is gene
 - Configuration via environment variables for the MCP server (`FCM_SERVICE_ACCOUNT_PATH`, `MCP_AUTH_TOKEN`, `ENROLLMENT_TOKEN`, `TOKEN_DB_PATH` — optional, default `/data/device_token.db`). `google-services.json` for Android. FCM device token received dynamically via the `/enroll` endpoint — no manual env var configuration.
 - Hexagonal architecture (ports & adapters) for the MCP server. The `notify` tool logic is the application core; MCP Streamable HTTP is the primary inbound adapter; `POST /enroll` is the second inbound adapter (plain HTTP, not MCP); the FCM sender is the primary outbound adapter; the SQLite token store is the second outbound adapter.
 - Two separate auth paths on the MCP server, both using bearer tokens in the `Authorization` header: the `notify` tool uses `MCP_AUTH_TOKEN` for the LLM; the `/enroll` endpoint uses `ENROLLMENT_TOKEN` for the Android app. Different credentials so they can rotate independently.
+- `detailed_message` is markdown by convention — no explicit flag or new field. The server passes the string as-is via the FCM data payload; the Android app renders it as formatted markdown in the detail view. The `notify` tool description is updated to tell the LLM that `detailed_message` supports markdown formatting.
+- Markdown rendering applies only to `detailed_message` in the detail view (`DetailActivity`). The system notification body (`NotificationCompat.BigTextStyle`) shows `short_message` as plain text — Android system notifications cannot render markdown.
+- Markdown syntax characters (e.g. `**`, `#`, `` ` ``) count toward the 3500-byte UTF-8 limit on `detailed_message`. The byte limit is unchanged; the LLM must account for markdown overhead when formulating messages.
 
 ## Non-goals
 
@@ -83,7 +90,7 @@ Personal project, monouser, self-hosted. The notification infrastructure is gene
 
 ## Success signal
 
-The LLM calls `notify` with a formulated message. The notification arrives on the Android device — title and short message visible in the notification, detailed message readable on tap — delivered through a self-hosted MCP server behind TLS with the device token enrolled automatically via `/enroll`. The user stops checking the todo-list manually because the nudge arrives proactively and says something useful.
+The LLM calls `notify` with a formulated message. The notification arrives on the Android device — title and short message visible in the notification, detailed message readable on tap and rendered as formatted markdown — delivered through a self-hosted MCP server behind TLS with the device token enrolled automatically via `/enroll`. The user stops checking the todo-list manually because the nudge arrives proactively and says something useful.
 
 ## Assumptions
 

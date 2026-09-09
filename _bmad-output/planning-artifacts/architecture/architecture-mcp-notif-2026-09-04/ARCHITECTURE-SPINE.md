@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters)'
 scope: 'mcp-notif: LLM-driven push notification infrastructure — MCP notification server, Firebase Cloud Messaging bridge, Android receiver app'
 status: final
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-09
 binds: [notify-tool, fcm-bridge, android-receiver, enrollment-endpoint, token-store]
 sources: [brief-mcp-notif-2026-09-04]
 companions: []
@@ -39,13 +39,13 @@ mcp-notif/
 
 - **Binds:** `notify-tool`, LLM caller
 - **Prevents:** The LLM and MCP server disagreeing on the tool's input contract; oversized payloads silently rejected by FCM
-- **Rule:** The `notify` tool accepts exactly three string fields — `title`, `short_message`, `detailed_message`. No optional fields in V1. All three are required, non-empty. Maximum UTF-8 byte lengths: `title` <= 100, `short_message` <= 500, `detailed_message` <= 3500. The MCP server MUST validate these before sending to FCM and return `type: "validation_error"` on violation. Limits account for FCM's 4 KB total data payload constraint with headroom for key names and encoding overhead.
+- **Rule:** The `notify` tool accepts exactly three string fields — `title`, `short_message`, `detailed_message`. No optional fields in V1. All three are required, non-empty. Maximum UTF-8 byte lengths: `title` <= 100, `short_message` <= 500, `detailed_message` <= 3500. The MCP server MUST validate these before sending to FCM and return `type: "validation_error"` on violation. Limits account for FCM's 4 KB total data payload constraint with headroom for key names and encoding overhead. The `detailed_message` field supports markdown formatting (see AD-14) — the `notify` tool description MUST indicate this to the LLM so it knows it can use markdown syntax (headings, bold, lists, code blocks, links). The server does not parse or validate markdown; it passes the string as-is.
 
 ### AD-2 — FCM message contract
 
 - **Binds:** `fcm-bridge`, `android-receiver`
 - **Prevents:** The MCP server and Android app building incompatible message shapes; foreground/background delivery-path divergence
-- **Rule:** The MCP server sends an FCM **data-only** message — NOT a data+notification message. The data payload contains all three fields: `data: { title, short_message, detailed_message }`. The Android app's `FirebaseMessagingService.onMessageReceived` is always called for data-only messages regardless of app state (foreground or background). The service builds the system notification from `title` + `short_message` and stores `detailed_message` in the PendingIntent for the detail view. The Android app MUST use `NotificationCompat.BigTextStyle` to display `short_message` so the full text is visible without truncation. The notification channel is created with `IMPORTANCE_DEFAULT`; channel ID is a constant defined by the Android app. The Android app MUST ignore any FCM data keys other than the three defined here. The MCP server MUST NOT add data keys not defined in this AD. This is the only shared data contract between the two built units.
+- **Rule:** The MCP server sends an FCM **data-only** message — NOT a data+notification message. The data payload contains all three fields: `data: { title, short_message, detailed_message }`. The Android app's `FirebaseMessagingService.onMessageReceived` is always called for data-only messages regardless of app state (foreground or background). The service builds the system notification from `title` + `short_message` and stores `detailed_message` in the PendingIntent for the detail view. The Android app MUST use `NotificationCompat.BigTextStyle` to display `short_message` so the full text is visible without truncation. The notification channel is created with `IMPORTANCE_DEFAULT`; channel ID is a constant defined by the Android app. The Android app MUST ignore any FCM data keys other than the three defined here. The MCP server MUST NOT add data keys not defined in this AD. This is the only shared data contract between the two built units. The detail view renders `detailed_message` per AD-14 (formatted markdown, not raw text). The system notification body (`BigTextStyle`) shows `short_message` as plain text — Android system notifications cannot render markdown.
 
 ### AD-3 — Minimal persistence (device token only)
 
@@ -125,12 +125,18 @@ graph LR
 - **Prevents:** Token loss on container restart; unstructured token storage; the enrollment writer and notify reader disagreeing on storage format
 - **Rule:** The device token is persisted in a SQLite file. Schema: a single table `device_token` with columns `id INTEGER PRIMARY KEY DEFAULT 1`, `token TEXT NOT NULL`, `enrolled_at TEXT NOT NULL` (format: `%Y-%m-%dT%H:%M:%SZ` — second precision, UTC 'Z' suffix). A single row is enforced (`id=1`). The table MUST be created at server startup, before either inbound adapter accepts requests, via `CREATE TABLE IF NOT EXISTS device_token (...)`. Enrollment writes via `INSERT OR REPLACE INTO device_token (id, token, enrolled_at) VALUES (1, ?, ?)`. The notify tool reads via `SELECT token FROM device_token WHERE id = 1`. Every connection MUST set `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` to prevent SQLITE_BUSY errors from concurrent read-write access. File path configured by `TOKEN_DB_PATH` env var, default `/data/device_token.db` inside the container. The file MUST be on a volume mount so it persists across container restarts. If the store is empty, the file is missing, OR the table is missing when `notify` is called, the server returns error type `"no_device_enrolled"` (per AD-8 — do not retry, user action required). If the SQLite file is present but corrupt (unopenable or query raises `DatabaseError`), the server catches the exception and returns error type `"store_unavailable"` (per AD-8 — retry after backoff; requires operator intervention to delete or restore the file).
 
+### AD-14 — Markdown rendering convention for `detailed_message`
+
+- **Binds:** `notify-tool`, `android-receiver`
+- **Prevents:** The LLM and Android app disagreeing on whether `detailed_message` is plain text or markdown; the server adding a format flag or new field that complicates the contract
+- **Rule:** `detailed_message` is markdown by convention — no explicit `format` flag, no new field in the `notify` tool. The MCP server passes the string as-is via the FCM data payload; it does not parse, validate, or transform markdown. The Android app renders `detailed_message` as formatted markdown in the detail view (`DetailActivity`) using the Markwon library (4.6.2, `io.noties.markwon`). The supported dialect is **CommonMark only** (Markwon core, no plugins): headings, bold, italic, unordered/ordered lists, fenced code blocks, inline code, links, blockquotes, horizontal rules. GFM extensions (tables, strikethrough, task lists) and raw HTML are NOT supported — the LLM MUST NOT use them. Raw HTML is escaped (no `HtmlPlugin` loaded). Links MUST be clickable — the detail `TextView` MUST set `movementMethod = LinkMovementMethod.getInstance()`. Plain text is valid markdown, so existing messages render unchanged — backward compatible. Markdown rendering applies ONLY to the detail view; the system notification body (`BigTextStyle`) shows `short_message` as plain text (Android system notifications cannot render markdown). Markdown syntax characters (e.g. `**`, `#`, `` ` ``) count toward the 3500-byte UTF-8 limit on `detailed_message` (per AD-1) — the limit is unchanged. The `notify` tool description (docstring) MUST indicate that `detailed_message` supports markdown formatting (listing the supported CommonMark features above) AND that `short_message` is displayed as plain text in the system notification (no markdown rendering) so the LLM does not use markdown syntax in `short_message`.
+
 ## Consistency Conventions
 
 | Concern | Convention |
 | --- | --- |
 | Naming | `snake_case` for Python (server), `camelCase` for Kotlin (Android). MCP tool name: `notify`. FCM data keys: `title`, `short_message`, `detailed_message` (snake_case, matches tool fields). Enrollment endpoint: `/enroll` (lowercase, no trailing slash). |
-| Data & formats | All fields are UTF-8 strings. No timestamps in V1 notification payloads. Error shape: `{ "error": { "type": "...", "message": "..." } }` returned as MCP tool error. Enrollment request: `{ "device_token": "..." }`. Enrollment success: `{ "status": "enrolled" }`. |
+| Data & formats | All fields are UTF-8 strings. No timestamps in V1 notification payloads. Error shape: `{ "error": { "type": "...", "message": "..." } }` returned as MCP tool error. Enrollment request: `{ "device_token": "..." }`. Enrollment success: `{ "status": "enrolled" }`. `detailed_message` is markdown (CommonMark only, per AD-14); `short_message` is plain text. `notify` tool docstring MUST state that `detailed_message` supports markdown and `short_message` does not (per AD-14). |
 | State & cross-cutting | No shared mutable state except the SQLite token store (single row, write from enrollment endpoint, read from notify tool). SQLite in WAL mode with `busy_timeout=5000` to allow concurrent read-write without SQLITE_BUSY. Table created at startup. Config via env vars (server) / google-services.json (Android). Auth: bearer token on every request — `MCP_AUTH_TOKEN` for LLM/notify, `ENROLLMENT_TOKEN` for Android/enrollment. Async: MCP server runs async (FastMCP is async-native; all tool handlers and endpoint handlers are async functions). SQLite access is synchronous (stdlib `sqlite3`); the async handlers call it in a thread executor or accept the blocking cost for a single-row read/write. |
 
 ## Stack
@@ -145,6 +151,7 @@ graph LR
 | SQLite | stdlib `sqlite3` (bundled with Python, no external dependency) |
 | Kotlin | latest stable (Android app) |
 | Firebase Android SDK | latest stable (Firebase Messaging) |
+| Markwon (Android) | 4.6.2 (markdown rendering, `io.noties.markwon` — no WebView, native Spans) |
 | Apache | already in place (reverse proxy / TLS termination) |
 | Podman | latest stable (container runtime) |
 

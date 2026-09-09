@@ -10,6 +10,7 @@ class McpNotifApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        appContext = this
         createNotificationChannel()
         // Kick off enrollment on first launch. Token rotation is handled by
         // McpNotifMessagingService.onNewToken.
@@ -26,5 +27,10 @@ class McpNotifApplication : Application() {
             NotificationManager.IMPORTANCE_DEFAULT,
         )
         manager.createNotificationChannel(channel)
+    }
+
+    companion object {
+        lateinit var appContext: Context
+            private set
     }
 }
