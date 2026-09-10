@@ -10,3 +10,7 @@ tests
 .gitignore
 .dockerignore
 *.md
+.env
+.env.example
+fcm-service-account.json
+compose.yaml

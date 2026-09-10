@@ -1,0 +1,29 @@
+# mcp-notif MCP server — Podman Compose deployment.
+#
+# Copy .env.example to .env and fill in the auth tokens.
+# Place your Firebase service account JSON at fcm-service-account.json
+# (git-ignored) — compose mounts it read-only into the container.
+#
+# Apache terminates TLS in front; this container serves plain HTTP on
+# 127.0.0.1:8080.
+
+services:
+  mcp-notif:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: mcp-notif
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - mcp-notif-data:/data:Z
+      - ./fcm-service-account.json:/run/secrets/fcm-service-account.json:ro,Z
+    environment:
+      # Path is fixed by the volume mount above; do not override in .env.
+      FCM_SERVICE_ACCOUNT_PATH: /run/secrets/fcm-service-account.json
+
+volumes:
+  mcp-notif-data:

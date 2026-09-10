@@ -17,9 +17,10 @@ This repo currently contains:
 - **`_bmad/`**, **`.agents/`** — BMAD workflow tooling and skill definitions.
   Not application code; safe to ignore when working on the server.
 
-Firebase/FCM project setup (`google-services.json`) and Podman/Apache
-deployment remain deferred to separate, per-environment builds (V1 scope is
-single-user, single-device, self-hosted).
+Firebase/FCM project setup (`google-services.json`) and the Apache reverse
+proxy remain deferred to separate, per-environment configuration (V1 scope is
+single-user, single-device, self-hosted). The Podman Compose deployment is
+provided via `mcp-server/compose.yaml`.
 
 ## Architecture (one line)
 
@@ -54,6 +55,8 @@ mcp-server/
     app.py                           assembles the ASGI app, startup table creation
   tests/                             pytest (57 tests), fake FCM sender, no live creds
   Containerfile                       Podman image (python:3.12-slim, uv, port 8080)
+  compose.yaml                        Podman Compose deployment (build, volumes, env_file)
+  .env.example                        template — copy to .env, fill in auth tokens
   .dockerignore
   pyproject.toml                      uv project + deps + dev deps + ruff config
 ```
@@ -119,6 +122,25 @@ MCP_AUTH_TOKEN=... ENROLLMENT_TOKEN=... FCM_SERVICE_ACCOUNT_PATH=... \
 The MCP endpoint is at `http://127.0.0.1:8080/mcp`; the Android app posts to
 `http://<host>/enroll`. In production an existing Apache reverse proxy
 terminates TLS in front of the Podman container; the server never handles TLS.
+
+### Deploy (Podman Compose)
+
+On the deployment server:
+
+```bash
+cd mcp-server
+cp .env.example .env          # then fill in MCP_AUTH_TOKEN and ENROLLMENT_TOKEN
+# place your Firebase service account JSON here:
+cp /path/to/service-account.json fcm-service-account.json
+
+podman-compose up -d --build   # builds the image, starts the container
+```
+
+Environment variables are read from `.env` (git-ignored) — no secrets on the
+command line. `compose.yaml` mounts the service account JSON read-only into
+the container and sets `FCM_SERVICE_ACCOUNT_PATH` to match. The SQLite token
+store persists in a named volume (`mcp-notif-data`). The container listens on
+`127.0.0.1:8080`; Apache reverse-proxies TLS on the public port.
 
 ### Test
 
@@ -228,5 +250,5 @@ The Android receiver app spec is `done`:
 The Android test suite spec is `in-progress`:
 `_bmad-output/implementation-artifacts/spec-android-fcm-test-suite.md`.
 
-Deferred (separate, per-environment builds): Firebase/FCM project setup
-(`google-services.json`), Podman/Apache deployment.
+Deferred (separate, per-environment configuration): Firebase/FCM project setup
+(`google-services.json`), Apache reverse proxy TLS config.
